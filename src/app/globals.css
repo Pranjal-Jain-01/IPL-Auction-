@@ -47,8 +47,8 @@
 .smoke-page,
 html:has(.smoke-page),
 .smoke-page #__next {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: #020817 !important;
+  background-color: #020817 !important;
   background-image: none !important;
 }
 

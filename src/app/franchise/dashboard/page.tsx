@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { FRANCHISE_BY_CODE, type FranchiseCode } from "@/lib/franchises";
-import { teamGradients, teamGradientDirection } from "@/constants/teamColors";
 import { mapAuctionStateRow, mapPlayerRow } from "@/lib/auctionUtils";
 import { supabase } from "@/lib/supabase-client";
 import type { AuctionStateRow, Player, PlayerRow } from "@/types/player";
 import AnimatedTabs from "@/components/ui/animated-tabs";
-import Galaxy from "@/components/ui/galaxy";
+import ProceduralGroundBackground from "@/components/ui/demo";
 
 
 type TeamRow = {
@@ -79,6 +79,19 @@ const hexToHSL = (hex: string): string => {
 
 const getStorageKey = (teamCode: FranchiseCode) => `franchise-strategy-${teamCode}`;
 
+const IPL_COLOR_THEME: Record<FranchiseCode, { base: string; text: "white" | "black" }> = {
+  CSK: { base: "#FFF100", text: "black" },
+  DC: { base: "#0116CF", text: "white" },
+  GT: { base: "#1B2133", text: "white" },
+  KKR: { base: "#2E0854", text: "white" },
+  LSG: { base: "#0057E2", text: "white" },
+  MI: { base: "#004BA0", text: "white" },
+  PBKS: { base: "#ED1B24", text: "white" },
+  RR: { base: "#FC4CFC", text: "black" },
+  RCB: { base: "#CC1213", text: "white" },
+  SRH: { base: "#FF6600", text: "white" },
+};
+
 const themeByFranchise: Record<FranchiseCode, { accent: string; accentSoft: string; surface: string; border: string; text: string; mutedText: string }> = {
   CSK: { accent: "#ffd200", accentSoft: "#fff0a8", surface: "#fffbe6", border: "#d4b12a", text: "#1e2f57", mutedText: "#6f6529" },
   MI: { accent: "#0a2a66", accentSoft: "#c7d8ff", surface: "#f3f8ff", border: "#16408e", text: "#0a2a66", mutedText: "#4a5d84" },
@@ -120,9 +133,32 @@ function PlayerCard({ player, bannerColor1, bannerColor2, franchiseCode, onClick
     ? teamBackgrounds[franchiseCode]
     : "/textures/silk-bg.png";
 
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const springX = useSpring(mouseX, { stiffness: 60, damping: 20 });
+  const springY = useSpring(mouseY, { stiffness: 60, damping: 20 });
+
+  const ringRotateXOuter = useTransform(springY, [-0.5, 0.5], [15, -15]);
+  const ringRotateYOuter = useTransform(springX, [-0.5, 0.5], [-15, 15]);
+  const ringRotateXInner = useTransform(springY, [-0.5, 0.5], [24, -24]);
+  const ringRotateYInner = useTransform(springX, [-0.5, 0.5], [-24, 24]);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
+    mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
+  };
+
+  const handleMouseLeave = () => {
+    mouseX.set(0);
+    mouseY.set(0);
+  };
+
   return (
     <div
       onClick={onClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       className="relative z-10 hover:z-20 transition-transform duration-200 ease-out hover:scale-105 active:scale-[0.98]"
       style={{ cursor: onClick ? "pointer" : "default" }}
     >
@@ -174,8 +210,47 @@ function PlayerCard({ player, bannerColor1, bannerColor2, franchiseCode, onClick
             alignItems: "center",
             justifyContent: "center",
             position: "relative",
-            zIndex: 2
+            zIndex: 2,
+            transformStyle: "preserve-3d",
+            perspective: "700px",
           }}>
+            <motion.div
+              className="absolute pointer-events-none"
+              style={{
+                width: "6.5rem",
+                height: "6.5rem",
+                rotateX: ringRotateXOuter,
+                rotateY: ringRotateYOuter,
+                transformStyle: "preserve-3d",
+              }}
+            >
+              <motion.div
+                className="w-full h-full rounded-full border-[2px] border-dashed border-white/35"
+                animate={{ rotateZ: 360, scale: [0.98, 1.04, 0.98] }}
+                transition={{
+                  rotateZ: { duration: 14, repeat: Infinity, ease: "linear" },
+                  scale: { duration: 2.6, repeat: Infinity, ease: "easeInOut" },
+                }}
+              />
+            </motion.div>
+
+            <motion.div
+              className="absolute pointer-events-none"
+              style={{
+                width: "5.8rem",
+                height: "5.8rem",
+                rotateX: ringRotateXInner,
+                rotateY: ringRotateYInner,
+                transformStyle: "preserve-3d",
+              }}
+            >
+              <motion.div
+                className="w-full h-full rounded-full border border-solid border-transparent border-t-[#F9CD05]/90 border-b-[#F9CD05]/35"
+                animate={{ rotateZ: -360 }}
+                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+              />
+            </motion.div>
+
             <div style={{
               width: "5rem",
               height: "5rem",
@@ -394,14 +469,10 @@ function FranchiseDashboardContent() {
   const teamCount = teamRow?.roster_count ?? squadPlayers.length;
   const teamRemaining = Math.max(teamBudget - teamSpent, 0);
   const theme = franchise ? getFranchiseTheme(franchise.code) : getFranchiseTheme("CSK");
-  const gradients = franchise ? teamGradients[franchise.code] : teamGradients.CSK;
-  const isReverse = franchise
-    ? teamGradientDirection[franchise.code] === "reverse"
-    : false;
-  const bannerColor1 = isReverse ? gradients[1] : gradients[0];
-  const bannerColor2 = isReverse ? gradients[0] : gradients[1];
-
-
+  const teamBrand = franchise ? IPL_COLOR_THEME[franchise.code] : IPL_COLOR_THEME.CSK;
+  const bannerColor1 = teamBrand.base;
+  const bannerColor2 = "#000000";
+  const teamTextColor = teamBrand.text === "black" ? "#111111" : "#ffffff";
 
   const toggleStrategyPlayer = (playerId: string) => {
     setSelectedStrategyIds((currentIds) => {
@@ -448,27 +519,14 @@ function FranchiseDashboardContent() {
 
   return (
     <div className="relative w-full min-h-screen overflow-hidden max-w-full">
-      {/* Background */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <Galaxy
-          density={0.9}
-          glowIntensity={0.35}
-          saturation={0.0}
-          hueShift={0}
-          speed={0.6}
-          mouseInteraction={false}
-          mouseRepulsion={false}
-          transparent={false}
-        />
-      </div>
-
-      {/* Page Content */}
-      <div
-        className="relative z-10 w-full h-screen flex flex-col items-center overflow-y-auto overflow-x-hidden"
-      >
+      <ProceduralGroundBackground
+        teamColor={bannerColor1}
+        accentColor={teamBrand.text === "black" ? "#000000" : "#ffffff"}
+      />
+      <div className="absolute inset-0 w-full h-screen flex flex-col items-center overflow-y-auto overflow-x-hidden pt-1 sm:pt-0 z-20">
 
         {/* Top Bar Wrapper */}
-        <div className="w-[95%] max-w-[1600px] mt-3 flex-shrink-0">
+        <div className="w-[95%] max-w-[1600px] mt-1 ml-2 sm:mt-3 sm:ml-0 flex-shrink-0">
           <div className="auth-topbar glass-override" style={{
             marginBottom: "0"
           }}>
@@ -497,7 +555,7 @@ function FranchiseDashboardContent() {
           </div>
         </div>
 
-        <main className="w-[95%] max-w-[1600px] mt-3 flex-grow flex flex-col gap-3 min-h-0 overflow-hidden mb-3">
+        <main className="w-[95%] max-w-[1600px] mt-1 ml-2 sm:mt-3 sm:ml-0 flex-grow flex flex-col gap-3 min-h-0 overflow-hidden mb-3">
           {errorMessage ? <section className="dashboard-card dashboard-card--wide">{errorMessage}</section> : null}
 
           <section className="franchise-team-board glass-override h-full flex flex-col min-h-0 overflow-hidden">
@@ -517,9 +575,9 @@ function FranchiseDashboardContent() {
                       className="w-40 h-40 object-contain flex-shrink-0"
                     />
                   </div>
-                  <div className="text-white">
+                  <div style={{ color: teamTextColor }}>
                     <h1 className="text-4xl font-bold tracking-tight leading-tight">{franchise.name}</h1>
-                    <p className="text-base font-medium text-white/90 mt-1">{teamCount} / 25 Players Signed</p>
+                    <p className="text-base font-medium mt-1" style={{ color: teamTextColor }}>{teamCount} / 25 Players Signed</p>
                   </div>
                 </div>
 
